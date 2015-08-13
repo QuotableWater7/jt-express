@@ -3,6 +3,9 @@ var app = express();
 var http = require('http').createServer(app);
 var bodyParser = require('body-parser');
 var _ = require('underscore');
+var io = require('socket.io').listen(http);
+
+var participants = [];
 
 console.log("**** application is running ****");
 
@@ -24,7 +27,29 @@ app.post('/message', function (req, res) {
     return res.json(400, { error: 'Bad request' });
   }
 
+  var name = req.body.name;
+  io.sockets.emit('incomingMessage', { message: message });
+
   res.json(200, { message: 'Success' });
+});
+
+io.on('connection', function (socket) {
+  socket.on('newUser', function (data) {
+    participants.push({ id: data.id, name: data.name });
+    io.sockets.emit('newConnection', { participants: participants });
+  });
+
+  socket.on('nameChange', function (data) {
+    var participant = _.findWhere(participants, { id: socket.id })
+    participant.name = data.name;
+    io.sockets.emit('nameChanged', { id: data.id, name: data.name });
+  });
+
+  socket.on('disconnect', function () {
+    var leaving_participant = _.findWhere(participants, { id: socket.id });
+    participants = _.without(participants, participant);
+    io.sockets.emit('userDisconnected', { id: socket.id, sender: 'system' });
+  });
 });
 
 http.listen(app.get('port'), app.get('ipaddr'));
